@@ -1,10 +1,40 @@
-﻿const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const db = require('./database');
 require('dotenv').config();
 
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
+
 const app = express();
 const PORT = 3002;
+
+// Configurao do Swagger
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'API Monitoramento de Pedidos - Grupo JB',
+      version: '1.0.0',
+      description: 'API para consulta de status de pedidos em tempo real.',
+    },
+    servers: [
+      {
+        url: 'http://localhost:3002',
+        description: 'Servidor Local',
+      },
+      {
+        url: `http://192.168.12.137:3002`,
+        description: 'Servidor de Rede',
+      }
+    ],
+  },
+  apis: ['./src/server.js'], // Aponta para este próprio arquivo para ler as docs
+};
+
+const swaggerDocs = swaggerJsdoc(swaggerOptions);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+
 app.use(cors());
 app.use(express.json());
 
@@ -17,7 +47,22 @@ const dicionario = {
 
 const statusFiltro = [...dicionario.em_rota, ...dicionario.inserido, ...dicionario.na_filial, ...dicionario.retornos];
 
-// NOVA ROTA: ÚLTIMA ATUALIZAÇÃO
+/**
+ * @swagger
+ * /api/status/ultima-atualizacao:
+ *   get:
+ *     summary: Retorna a data e hora da última atualização no banco de dados.
+ *     responses:
+ *       200:
+ *         description: Sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ultima:
+ *                   type: string
+ */
 app.get('/api/status/ultima-atualizacao', async (req, res) => {
   try {
     const result = await db.raw("SELECT TO_CHAR(MAX(data_insercao), 'DD/MM/YYYY HH24:MI:SS') as ultima FROM pedidos");
@@ -25,6 +70,15 @@ app.get('/api/status/ultima-atualizacao', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+/**
+ * @swagger
+ * /api/pedidos/hoje/resumo:
+ *   get:
+ *     summary: Retorna o resumo de pedidos do dia por filial.
+ *     responses:
+ *       200:
+ *         description: Sucesso
+ */
 app.get('/api/pedidos/hoje/resumo', async (req, res) => {
   try {
     const fRota = dicionario.em_rota.map(s => `'${s}'`).join(',');
@@ -53,6 +107,31 @@ app.get('/api/pedidos/hoje/resumo', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+/**
+ * @swagger
+ * /api/pedidos/hoje/detalhe:
+ *   get:
+ *     summary: Retorna os detalhes dos pedidos com filtros e paginação.
+ *     parameters:
+ *       - in: query
+ *         name: cd
+ *         schema:
+ *           type: string
+ *         description: Nome da filial
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *         description: Categoria do status (ex. em_rota)
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Termo de busca (Pedido, NFE ou Remessa)
+ *     responses:
+ *       200:
+ *         description: Sucesso
+ */
 app.get('/api/pedidos/hoje/detalhe', async (req, res) => {
   const { cd, tipo, page = 0, limit = 20, search = '' } = req.query;
   const offset = parseInt(page) * parseInt(limit);
@@ -73,4 +152,4 @@ app.get('/api/pedidos/hoje/detalhe', async (req, res) => {
   } catch (error) { res.json([]); }
 });
 
-app.listen(PORT, () => { console.log('🚀 API ATUALIZADA COM DATA DE CARGA NA PORTA: ' + PORT); });
+app.listen(PORT, '0.0.0.0', () => { console.log('🚀 API RODANDO EM TODAS AS INTERFACES NA PORTA: ' + PORT); });
